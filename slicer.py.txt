@@ -1,0 +1,38 @@
+from PIL import Image
+import struct
+import os
+
+def sheet_to_rgb565_bin(sheet_path, out_path, num_frames=4, target_size=(160, 160), bg_color=(0, 0, 0)):
+    im = Image.open(sheet_path).convert("RGB")
+    sheet_w, sheet_h = im.size
+    frame_w = sheet_w // num_frames
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    with open(out_path, "wb") as f:
+        for i in range(num_frames):
+            # 1. Crop individual frame from horizontal strip
+            left = i * frame_w
+            right = left + frame_w
+            crop = im.crop((left, 0, right, sheet_h))
+
+            # 2. Pad into a square so the character does not stretch
+            side = max(frame_w, sheet_h)
+            square = Image.new("RGB", (side, side), bg_color)
+            offset_x = (side - frame_w) // 2
+            offset_y = (side - sheet_h) // 2
+            square.paste(crop, (offset_x, offset_y))
+
+            # 3. Resize to 160x160 using NEAREST to keep pixel art crisp
+            resized = square.resize(target_size, Image.Resampling.NEAREST)
+
+            # 4. Write 16-bit RGB565 (big-endian) bytes
+            for r, g, b in resized.getdata():
+                rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+                f.write(struct.pack(">H", rgb565))
+
+    print(f"Saved {num_frames} frames ({os.path.getsize(out_path)} bytes) -> {out_path}")
+
+# Convert your generated sprite sheet into idle.bin
+sheet_to_rgb565_bin("idle_sheet.png", "data/idle.bin", num_frames=4, target_size=(240, 240))
+sheet_to_rgb565_bin("headpat_sheet.jpg", "data/headpat.bin", num_frames=4, target_size=(240, 240))
